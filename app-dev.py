@@ -26,11 +26,11 @@ def save_translation(language, translation):
     session.execute(insert_stmt)
     session.commit()
 
-# Function to check if translation is already saved in the database
-def is_translation_saved(language):
-    query = select(translations_table.c.language).where(translations_table.c.language == language)
-    result = session.execute(query).fetchone()
-    return result is not None
+# Function to update translation in the database
+def update_translation(language, translation):
+    update_stmt = translations_table.update().where(translations_table.c.language == language).values(translation=translation)
+    session.execute(update_stmt)
+    session.commit()
 
 # Function to get saved translation from the database
 def get_saved_translation(language):
@@ -62,6 +62,10 @@ st.title("Translation App")
 if 'translations' not in st.session_state:
     st.session_state.translations = {}
 
+# Initialize saved languages state
+if 'saved_languages' not in st.session_state:
+    st.session_state.saved_languages = {}
+
 # Text input for user to enter text to be translated
 input_text = st.text_area("Enter text to translate:", height=200)
 
@@ -69,6 +73,7 @@ input_text = st.text_area("Enter text to translate:", height=200)
 if st.button("Translate"):
     if input_text:
         st.session_state.translations = get_translated_text(input_text)
+        st.session_state.saved_languages = {}  # Reset saved languages
         if not st.session_state.translations:
             st.error("No translation received.")
     else:
@@ -86,14 +91,19 @@ if st.session_state.translations:
     st.subheader(f"Translation in {selected_language}")
     if saved_translation:
         translation_text = saved_translation
-        st.text_area(label=f"{selected_language} (Saved)", value=translation_text, height=200)
+        label_text = f"{selected_language} **:green[(Saved)]**"
+        st.session_state.saved_languages[selected_language] = translation_text
     else:
         translation_text = st.session_state.translations[selected_language]
-        st.text_area(label=selected_language, value=translation_text, height=200)
+        label_text = selected_language
 
-    if st.button("Save Translation"):
-        if not saved_translation:
-            save_translation(selected_language, translation_text)
-            st.success(f"Translation in {selected_language} saved successfully.")
+    updated_translation = st.text_area(label=label_text, value=translation_text, height=200, key=selected_language)
+
+    if updated_translation != translation_text:
+        if saved_translation:
+            update_translation(selected_language, updated_translation)
+            st.success(f"Translation in {selected_language} updated successfully.")
         else:
-            st.warning(f"Translation in {selected_language} is already saved.")
+            save_translation(selected_language, updated_translation)
+            st.success(f"Translation in {selected_language} saved successfully.")
+        st.session_state.saved_languages[selected_language] = updated_translation
