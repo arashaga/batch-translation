@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
-from sqlalchemy import create_engine, Column, String, Integer, MetaData, Table
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
+from datetime import datetime
 
 # SQLAlchemy setup
 DATABASE_URL = "sqlite:///translations.db"  # Example using SQLite
@@ -12,8 +13,10 @@ metadata = MetaData()
 translations_table = Table(
     'translations', metadata,
     Column('id', Integer, primary_key=True),
+    Column('project', String),
     Column('language', String),
-    Column('translation', String)
+    Column('translation', String),
+    Column('date_added', DateTime)
 )
 
 metadata.create_all(engine)
@@ -21,20 +24,34 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # Function to save translation to the database
-def save_translation(language, translation):
-    insert_stmt = translations_table.insert().values(language=language, translation=translation)
+def save_translation(project, language, translation):
+    insert_stmt = translations_table.insert().values(
+        project=project,
+        language=language,
+        translation=translation,
+        date_added=datetime.now()
+    )
     session.execute(insert_stmt)
     session.commit()
 
 # Function to update translation in the database
-def update_translation(language, translation):
-    update_stmt = translations_table.update().where(translations_table.c.language == language).values(translation=translation)
+def update_translation(project, language, translation):
+    update_stmt = translations_table.update().where(
+        (translations_table.c.project == project) & 
+        (translations_table.c.language == language)
+    ).values(
+        translation=translation,
+        date_added=datetime.now()
+    )
     session.execute(update_stmt)
     session.commit()
 
 # Function to get saved translation from the database
-def get_saved_translation(language):
-    query = select(translations_table.c.translation).where(translations_table.c.language == language)
+def get_saved_translation(project, language):
+    query = select(translations_table.c.translation).where(
+        (translations_table.c.project == project) & 
+        (translations_table.c.language == language)
+    )
     result = session.execute(query).fetchone()
     return result[0] if result else None
 
@@ -66,18 +83,21 @@ if 'translations' not in st.session_state:
 if 'saved_languages' not in st.session_state:
     st.session_state.saved_languages = {}
 
+# Project name input
+project_name = st.text_input("Enter project name:")
+
 # Text input for user to enter text to be translated
 input_text = st.text_area("Enter text to translate:", height=200)
 
 # Button to trigger translation
 if st.button("Translate"):
-    if input_text:
+    if project_name and input_text:
         st.session_state.translations = get_translated_text(input_text)
         st.session_state.saved_languages = {}  # Reset saved languages
         if not st.session_state.translations:
             st.error("No translation received.")
     else:
-        st.warning("Please enter text to translate.")
+        st.warning("Please enter both project name and text to translate.")
 
 # Sidebar for language selection
 if st.session_state.translations:
@@ -85,7 +105,7 @@ if st.session_state.translations:
     selected_language = st.sidebar.radio("Languages", list(st.session_state.translations.keys()))
 
     # Check if the translation is already saved
-    saved_translation = get_saved_translation(selected_language)
+    saved_translation = get_saved_translation(project_name, selected_language)
 
     # Display the translation for the selected language
     st.subheader(f"Translation in {selected_language}")
@@ -99,11 +119,11 @@ if st.session_state.translations:
 
     updated_translation = st.text_area(label=label_text, value=translation_text, height=200, key=selected_language)
 
-    if updated_translation != translation_text:
+    if st.button("Save Translation"):
         if saved_translation:
-            update_translation(selected_language, updated_translation)
+            update_translation(project_name, selected_language, updated_translation)
             st.success(f"Translation in {selected_language} updated successfully.")
         else:
-            save_translation(selected_language, updated_translation)
+            save_translation(project_name, selected_language, updated_translation)
             st.success(f"Translation in {selected_language} saved successfully.")
         st.session_state.saved_languages[selected_language] = updated_translation
