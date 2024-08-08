@@ -55,6 +55,14 @@ def get_saved_translation(project, language):
     result = session.execute(query).fetchone()
     return result[0] if result else None
 
+# Function to get all translations for a project
+def get_project_translations(project):
+    query = select(translations_table.c.language, translations_table.c.translation).where(
+        translations_table.c.project == project
+    )
+    result = session.execute(query).fetchall()
+    return result
+
 # Function to get translated text from the URL
 def get_translated_text(input_text):
     url = "http://127.0.0.1:8000/translate"
@@ -75,55 +83,78 @@ def get_translated_text(input_text):
 # Streamlit app
 st.title("Translation App")
 
-# Initialize session state
-if 'translations' not in st.session_state:
-    st.session_state.translations = {}
+# Select page
+page = st.sidebar.selectbox("Select Page", ["Translate", "View Projects"])
 
-# Initialize saved languages state
-if 'saved_languages' not in st.session_state:
-    st.session_state.saved_languages = {}
+if page == "Translate":
+    # Initialize session state
+    if 'translations' not in st.session_state:
+        st.session_state.translations = {}
 
-# Project name input
-project_name = st.text_input("Enter project name:")
+    # Initialize modified languages state
+    if 'modified_languages' not in st.session_state:
+        st.session_state.modified_languages = {}
 
-# Text input for user to enter text to be translated
-input_text = st.text_area("Enter text to translate:", height=200)
+    # Project name input
+    project_name = st.text_input("Enter project name:")
 
-# Button to trigger translation
-if st.button("Translate"):
-    if project_name and input_text:
-        st.session_state.translations = get_translated_text(input_text)
-        st.session_state.saved_languages = {}  # Reset saved languages
-        if not st.session_state.translations:
-            st.error("No translation received.")
-    else:
-        st.warning("Please enter both project name and text to translate.")
+    # Text input for user to enter text to be translated
+    input_text = st.text_area("Enter text to translate:", height=200)
 
-# Sidebar for language selection
-if st.session_state.translations:
-    st.sidebar.title("Select Language")
-    selected_language = st.sidebar.radio("Languages", list(st.session_state.translations.keys()))
-
-    # Check if the translation is already saved
-    saved_translation = get_saved_translation(project_name, selected_language)
-
-    # Display the translation for the selected language
-    st.subheader(f"Translation in {selected_language}")
-    if saved_translation:
-        translation_text = saved_translation
-        label_text = f"{selected_language} **:green[(Saved)]**"
-        st.session_state.saved_languages[selected_language] = translation_text
-    else:
-        translation_text = st.session_state.translations[selected_language]
-        label_text = selected_language
-
-    updated_translation = st.text_area(label=label_text, value=translation_text, height=200, key=selected_language)
-
-    if st.button("Save Translation"):
-        if saved_translation:
-            update_translation(project_name, selected_language, updated_translation)
-            st.success(f"Translation in {selected_language} updated successfully.")
+    # Button to trigger translation
+    if st.button("Translate"):
+        if project_name and input_text:
+            st.session_state.translations = get_translated_text(input_text)
+            st.session_state.modified_languages = {}  # Reset modified languages
+            if st.session_state.translations:
+                for lang, text in st.session_state.translations.items():
+                    save_translation(project_name, lang, text)
+            else:
+                st.error("No translation received.")
         else:
-            save_translation(project_name, selected_language, updated_translation)
-            st.success(f"Translation in {selected_language} saved successfully.")
-        st.session_state.saved_languages[selected_language] = updated_translation
+            st.warning("Please enter both project name and text to translate.")
+
+    # Sidebar for language selection
+    if st.session_state.translations:
+        st.sidebar.title("Select Language")
+        selected_language = st.sidebar.radio("Languages", list(st.session_state.translations.keys()))
+
+        # Check if the translation is already saved
+        saved_translation = get_saved_translation(project_name, selected_language)
+
+        # Display the translation for the selected language
+        st.subheader(f"Translation in {selected_language}")
+        if saved_translation:
+            translation_text = saved_translation
+        else:
+            translation_text = st.session_state.translations[selected_language]
+
+        label_text = selected_language
+        if selected_language in st.session_state.modified_languages:
+            label_text = f"{selected_language} **:green[(Modified)]**"
+
+        updated_translation = st.text_area(label=label_text, value=translation_text, height=200, key=selected_language)
+
+        if st.button("Save Translation"):
+            if saved_translation:
+                update_translation(project_name, selected_language, updated_translation)
+                st.success(f"Translation in {selected_language} updated successfully.")
+            else:
+                save_translation(project_name, selected_language, updated_translation)
+                st.success(f"Translation in {selected_language} saved successfully.")
+            st.session_state.modified_languages[selected_language] = updated_translation
+
+elif page == "View Projects":
+    st.header("View Project Translations")
+
+    # Retrieve list of projects
+    projects_query = select(translations_table.c.project).distinct()
+    projects = [row[0] for row in session.execute(projects_query).fetchall()]
+
+    selected_project = st.selectbox("Select Project", projects)
+
+    if selected_project:
+        translations = get_project_translations(selected_project)
+        for language, translation in translations:
+            st.subheader(f"Language: {language}")
+            st.text_area(label=f"{language} Translation", value=translation, height=200, key=f"{selected_project}_{language}")
