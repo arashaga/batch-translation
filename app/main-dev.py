@@ -63,11 +63,13 @@ async def translate_text(language: str, request: TranslationRequest):
         try:
             translated_json = json.loads(cleaned_text)
         except json.JSONDecodeError:
+            print("JSON Decode Error:", cleaned_text)
             raise HTTPException(status_code=500, detail="Invalid JSON format in response")
 
         return {"translated_text": translated_json}
 
     except Exception as e:
+        print("Exception:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
