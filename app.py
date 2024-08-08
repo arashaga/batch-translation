@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, MetaData, Table
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, MetaData, Table, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
 from datetime import datetime
@@ -10,6 +10,7 @@ DATABASE_URL = "sqlite:///translations.db"  # Example using SQLite
 engine = create_engine(DATABASE_URL)
 metadata = MetaData()
 
+# Define the translations table
 translations_table = Table(
     'translations', metadata,
     Column('id', Integer, primary_key=True),
@@ -19,7 +20,11 @@ translations_table = Table(
     Column('date_added', DateTime)
 )
 
-metadata.create_all(engine)
+# Create the table if it does not exist
+inspector = inspect(engine)
+if not inspector.has_table('translations'):
+    metadata.create_all(engine)
+
 Session = sessionmaker(bind=engine)
 session = Session()
 
@@ -63,20 +68,23 @@ def get_project_translations(project):
     result = session.execute(query).fetchall()
     return result
 
-# Function to get translated text from the URL
-def get_translated_text(input_text):
-    url = "http://127.0.0.1:8000/translate"
+# Function to get translated text for a specific language from the URL
+def get_translated_text(input_text, language):
+    url = f"http://127.0.0.1:8000/translate/{language}/"
     payload = {"text": input_text}
     response = requests.post(url, json=payload)
     if response.status_code == 200:
         try:
-            return response.json().get('translated_text')
+            translation = response.json().get('translated_text')
+            if isinstance(translation, dict):
+                return translation.get(language)
+            return translation
         except ValueError:
             st.error("Error decoding JSON response")
             st.text(response.text)  # Debug: Show the raw response text
             return None
     else:
-        st.error(f"Failed to fetch translations. Status code: {response.status_code}")
+        st.error(f"Failed to fetch translation for {language}. Status code: {response.status_code}")
         st.text(response.text)  # Debug: Show the raw response text
         return None
 
@@ -101,16 +109,35 @@ if page == "Translate":
     # Text input for user to enter text to be translated
     input_text = st.text_area("Enter text to translate:", height=200)
 
+    # Languages list
+    languages = ["French", "Spanish", "Italian", "German", "Portuguese", "Russian", "Chinese", "Japanese", "Korean", "Arabic"]
+
     # Button to trigger translation
     if st.button("Translate"):
         if project_name and input_text:
-            st.session_state.translations = get_translated_text(input_text)
+            st.session_state.translations = {}
             st.session_state.modified_languages = {}  # Reset modified languages
-            if st.session_state.translations:
-                for lang, text in st.session_state.translations.items():
-                    save_translation(project_name, lang, text)
-            else:
-                st.error("No translation received.")
+            
+            progress_bar = st.progress(0)
+            progress_step = 1 / len(languages)
+            current_progress = 0
+            
+            status_text = st.empty()
+            
+            for idx, lang in enumerate(languages):
+                status_text.text(f"Translating in {lang}...")
+                translation = get_translated_text(input_text, lang)
+                if translation:
+                    st.session_state.translations[lang] = translation
+                    save_translation(project_name, lang, translation)
+                else:
+                    st.error(f"No translation received for {lang}.")
+                
+                current_progress += progress_step
+                progress_bar.progress(current_progress)
+            
+            status_text.text("Translation complete.")
+            progress_bar.progress(1.0)  # Ensure the progress bar reaches 100% after completion
         else:
             st.warning("Please enter both project name and text to translate.")
 
