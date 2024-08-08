@@ -27,7 +27,10 @@ class TranslationRequest(BaseModel):
 
 supported_languages = [
     "French", "Spanish", "Italian", "German", "Portuguese",
-    "Russian", "Chinese", "Japanese", "Korean", "Arabic"
+    "Russian", "Chinese", "Japanese", "Korean", "Arabic",
+    "Hindi", "Bengali", "Punjabi", "Tamil", "Telugu",
+    "Turkish", "Vietnamese", "Thai", "Swedish", "Dutch",
+    "Greek", "Hebrew", "Indonesian", "Malay", "Persian"
 ]
 
 @app.post("/translate/{language}/")

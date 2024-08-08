@@ -57,12 +57,12 @@ def update_translation(project, language, original_text, translation):
 
 # Function to get saved translation from the database
 def get_saved_translation(project, language):
-    query = select(translations_table.c.translation).where(
+    query = select(translations_table.c.original_text, translations_table.c.translation).where(
         (translations_table.c.project == project) & 
         (translations_table.c.language == language)
     )
     result = session.execute(query).fetchone()
-    return result[0] if result else None
+    return result if result else (None, None)
 
 # Function to get all translations for a project
 def get_project_translations(project):
@@ -92,6 +92,11 @@ def get_translated_text(input_html, language):
         st.text(response.text)  # Debug: Show the raw response text
         return None
 
+# Function to check if a language is RTL
+def is_rtl_language(language):
+    rtl_languages = ["Arabic", "Farsi", "Hebrew", "Urdu", "Persian"]
+    return language in rtl_languages
+
 # Streamlit app
 st.title("Translation App")
 
@@ -114,7 +119,13 @@ if page == "Translate":
     input_html = st_quill("Enter text to translate:", key="input_text", html=True)
 
     # Languages list
-    languages = ["French", "Spanish", "Italian", "German", "Portuguese", "Russian", "Chinese", "Japanese", "Korean", "Arabic"]
+    languages = [
+    "French", "Spanish", "Italian", "German", "Portuguese",
+    "Russian", "Chinese", "Japanese", "Korean", "Arabic",
+    "Hindi", "Bengali", "Punjabi", "Tamil", "Telugu",
+    "Turkish", "Vietnamese", "Thai", "Swedish", "Dutch",
+    "Greek", "Hebrew", "Indonesian", "Malay", "Persian"
+]
 
     # Button to trigger translation
     if st.button("Translate"):
@@ -151,7 +162,7 @@ if page == "Translate":
         selected_language = st.sidebar.radio("Languages", list(st.session_state.translations.keys()))
 
         # Check if the translation is already saved
-        saved_translation = get_saved_translation(project_name, selected_language)
+        original_text, saved_translation = get_saved_translation(project_name, selected_language)
 
         # Display the translation for the selected language
         st.subheader(f"Translation in {selected_language}")
@@ -165,16 +176,23 @@ if page == "Translate":
             label_text = f"{selected_language} **:green[(Modified)]**"
 
         st.markdown(label_text)
-        updated_translation = st_quill(value=translation_text, key=selected_language, html=True)
+
+        if is_rtl_language(selected_language):
+            st.markdown(
+                f'<div style="direction: rtl; text-align: right;">{translation_text}</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st_quill(value=translation_text, key=selected_language, html=True)
 
         if st.button(f"Save Translation for {selected_language}"):
             if saved_translation:
-                update_translation(project_name, selected_language, input_html, updated_translation)
+                update_translation(project_name, selected_language, original_text, translation_text)
                 st.success(f"Translation in {selected_language} updated successfully.")
             else:
-                save_translation(project_name, selected_language, input_html, updated_translation)
+                save_translation(project_name, selected_language, input_html, translation_text)
                 st.success(f"Translation in {selected_language} saved successfully.")
-            st.session_state.modified_languages[selected_language] = updated_translation
+            st.session_state.modified_languages[selected_language] = translation_text
 
 elif page == "View Projects":
     st.header("View Project Translations")
@@ -187,9 +205,17 @@ elif page == "View Projects":
 
     if selected_project:
         translations = get_project_translations(selected_project)
-        for language, original_text, translation in translations:
-            st.subheader(f"Language: {language}")
-            st.markdown("**Original Text:**")
-            st_quill(value=original_text, key=f"{selected_project}_{language}_original", html=True, readonly=True)
-            st.markdown("**Translation:**")
-            st_quill(value=translation, key=f"{selected_project}_{language}_translation", html=True, readonly=True)
+        if translations:
+            original_text = translations[0][1]  # Get the original text from the first translation entry
+            st.subheader("Language: English")
+            st_quill(value=original_text, key=f"{selected_project}_original", html=True, readonly=True)
+
+            for language, _, translation in translations:
+                st.subheader(f"Language: {language}")
+                if is_rtl_language(language):
+                    st.markdown(
+                        f'<div style="direction: rtl; text-align: right;">{translation}</div>',
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st_quill(value=translation, key=f"{selected_project}_{language}_translation", html=True, readonly=True)

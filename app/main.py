@@ -25,38 +25,30 @@ if not use_azure_active_directory:
 class TranslationRequest(BaseModel):
     text: str
 
-@app.post("/translate/")
-async def translate_text(request: TranslationRequest):
-    sys_msg = '''You are a helpful assistant whose role is to translate English text to the languages below:
-    1- French
-    2- Spanish
-    3- Italian
-    4- German
-    5- Portuguese
-    6- Russian
-    7- Chinese
-    8- Japanese
-    9- Korean
-    10- Arabic
+supported_languages = [
+    "French", "Spanish", "Italian", "German", "Portuguese",
+    "Russian", "Chinese", "Japanese", "Korean", "Arabic",
+    "Hindi", "Bengali", "Punjabi", "Tamil", "Telugu",
+    "Turkish", "Vietnamese", "Thai", "Swedish", "Dutch",
+    "Greek", "Hebrew", "Indonesian", "Malay", "Persian"
+]
 
-    Please provide the translations in a valid JSON format like this:
-    {
-        "French": "translation",
-        "Spanish": "translation",
-        "Italian": "translation",
-        "German": "translation",
-        "Portuguese": "translation",
-        "Russian": "translation",
-        "Chinese": "translation",
-        "Japanese": "translation",
-        "Korean": "translation",
-        "Arabic": "translation"
-    }
+@app.post("/translate/{language}/")
+async def translate_text(language: str, request: TranslationRequest):
+    if language not in supported_languages:
+        raise HTTPException(status_code=400, detail=f"Language '{language}' not found. Supported languages are: {', '.join(supported_languages)}")
+
+    sys_msg = f'''You are a helpful assistant whose role is to translate English text to {language}.
+
+    Please provide the translation in a valid JSON format like this:
+    {{
+        "{language}": "translation"
+    }}
     '''
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": sys_msg},
                 {"role": "user", "content": request.text},
@@ -74,11 +66,13 @@ async def translate_text(request: TranslationRequest):
         try:
             translated_json = json.loads(cleaned_text)
         except json.JSONDecodeError:
+            print("JSON Decode Error:", cleaned_text)
             raise HTTPException(status_code=500, detail="Invalid JSON format in response")
 
         return {"translated_text": translated_json}
 
     except Exception as e:
+        print("Exception:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
