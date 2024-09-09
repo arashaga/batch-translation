@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
 from datetime import datetime
 from streamlit_quill import st_quill
+import os
 
 # SQLAlchemy setup
 DATABASE_URL = "sqlite:///translations.db"  # Example using SQLite
@@ -75,6 +76,8 @@ def get_project_translations(project):
 # Function to get translated text for a specific language from the URL
 def get_translated_text(input_html, language):
     url = f"http://127.0.0.1:8000/translate/{language}/"
+    # fastapi_host = os.getenv('FASTAPI_HOST')
+    # url = f"http://{fastapi_host}:8000/translate/{language}/"
     payload = {"text": input_html}  # Send HTML content as "text"
     response = requests.post(url, json=payload)
     if response.status_code == 200:

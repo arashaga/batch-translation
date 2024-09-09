@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   fastapi:
@@ -6,13 +6,20 @@ services:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
-    depends_on:
-      - streamlit
+    volumes:
+      - translations-db:/app
+    env_file:
+      - .env
 
   streamlit:
     build: .
-    command: ["streamlit", "run", "app.py", "--server.port=80", "--server.enableCORS=false"]
+    command: ["streamlit", "run", "app.py", "--server.port=8080", "--server.enableCORS=false"]
     ports:
-      - "80:80"
+      - "8080:8080"
     volumes:
-      - .:/app
+      - translations-db:/app
+    environment:
+      - FASTAPI_HOST=fastapi
+
+volumes:
+  translations-db:
